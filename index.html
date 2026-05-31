@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pydantic AI — A Visual Deep Dive</title>
+    <style>
+        /* ═══════════════════════════════════════════════════════════════
+           RESET & BASE — matches the LLM Hub agent-deck dark theme
+           ═══════════════════════════════════════════════════════════════ */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg:        #0a0a0f;
+            --bg-card:   #12121a;
+            --bg-code:   #1a1a2e;
+            --border:    #2a2a3e;
+            --text:      #c8c8d4;
+            --text-dim:  #7a7a8e;
+            --heading:   #e8e8f0;
+            --accent:    #6c63ff;
+            --accent2:   #00d4aa;
+            --accent3:   #ff6b6b;
+            --accent4:   #ffd93d;
+            --glow:      rgba(108, 99, 255, 0.25);
+        }
+
+        html { scroll-behavior: smooth; font-size: 16px; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        ::selection { background: var(--accent); color: #fff; }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           HERO
+           ═══════════════════════════════════════════════════════════════ */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 820px;
+        }
+        .hero .tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 999px;
+            padding: 0.35rem 1.2rem;
+            margin-bottom: 1.5rem;
+        }
+        .hero h1 {
+            font-size: clamp(2.4rem, 6vw, 4rem);
+            font-weight: 800;
+            color: var(--heading);
+            line-height: 1.15;
+            margin-bottom: 1rem;
+        }
+        .hero h1 em {
+            font-style: normal;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.1rem;
+            color: var(--text-dim);
+            max-width: 640px;
+            margin: 0 auto 2rem;
+        }
+        .hero .cta {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            padding: 0.8rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .hero .cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--glow);
+            text-decoration: none;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           NAV (sticky sidebar on desktop, top bar on mobile)
+           ═══════════════════════════════════════════════════════════════ */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 230px;
+            height: 100vh;
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            z-index: 100;
+            padding: 1.5rem 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+        }
+        nav.open { transform: translateX(0); }
+        nav a {
+            display: block;
+            padding: 0.5rem 1.2rem;
+            font-size: 0.82rem;
+            color: var(--text-dim);
+            transition: color 0.2s, border-left 0.2s;
+            border-left: 3px solid transparent;
+        }
+        nav a:hover, nav a.active {
+            color: var(--accent);
+            border-left-color: var(--accent);
+            text-decoration: none;
+            background: rgba(108,99,255,0.06);
+        }
+        .nav-toggle {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 200;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text);
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        @media (min-width: 1100px) {
+            nav { transform: translateX(0); }
+            .nav-toggle { display: none; }
+            main { margin-left: 230px; }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           SECTIONS
+           ═══════════════════════════════════════════════════════════════ */
+        main { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
+        section {
+            padding: 5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .section-label {
+            font-size: 0.7rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+        section h2 {
+            font-size: clamp(1.6rem, 4vw, 2.2rem);
+            font-weight: 700;
+            color: var(--heading);
+            margin-bottom: 1.2rem;
+        }
+        section h3 {
+            font-size: 1.2rem;
+            color: var(--heading);
+            margin: 2rem 0 0.6rem;
+        }
+        section h4 {
+            font-size: 1rem;
+            color: var(--accent2);
+            margin-bottom: 0.3rem;
+        }
+        section p, section li { margin-bottom: 0.8rem; }
+        section ul, section ol { margin-left: 1.3rem; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           CARDS, GRIDS, TABLES
+           ═══════════════════════════════════════════════════════════════ */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.2rem;
+            margin: 1.5rem 0;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--glow);
+        }
+        .card .icon { font-size: 1.8rem; margin-bottom: 0.6rem; }
+        .card h4 { margin-bottom: 0.4rem; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.7rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        td { color: var(--text); }
+        tr:hover td { background: rgba(108,99,255,0.04); }
+
+        /* ═══════════════════════════════════════════════════════════════
+           CODE BLOCKS
+           ═══════════════════════════════════════════════════════════════ */
+        pre {
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem 1.5rem;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            margin: 1rem 0;
+        }
+        code {
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            color: #d4d4e8;
+        }
+        p code, li code, td code {
+            background: var(--bg-code);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .kw  { color: #c678dd; }
+        .str { color: #98c379; }
+        .cm  { color: #5c6370; font-style: italic; }
+        .fn  { color: #61afef; }
+        .num { color: #d19a66; }
+        .op  { color: #56b6c2; }
+        .cls { color: #e5c07b; }
+        .dec { color: #d19a66; }
+
+        .code-label {
+            font-family: 'Cascadia Code', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin: 1.5rem 0 -0.4rem;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           FLOW DIAGRAMS (CSS)
+           ═══════════════════════════════════════════════════════════════ */
+        .flow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            align-items: center;
+            justify-content: center;
+            margin: 2rem 0;
+        }
+        .flow-node {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.8rem 1.2rem;
+            text-align: center;
+            min-width: 110px;
+            font-size: 0.85rem;
+        }
+        .flow-node.hl { border-color: var(--accent2); color: var(--accent2); }
+        .flow-node .icon { font-size: 1.4rem; display: block; margin-bottom: 0.3rem; }
+        .flow-arrow { color: var(--accent); font-size: 1.2rem; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           CALLOUT
+           ═══════════════════════════════════════════════════════════════ */
+        .callout {
+            background: rgba(108,99,255,0.06);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 8px 8px 0;
+            padding: 1rem 1.3rem;
+            margin: 1.5rem 0;
+            font-size: 0.92rem;
+        }
+        .callout.teal { border-left-color: var(--accent2); background: rgba(0,212,170,0.06); }
+        .callout strong { color: var(--heading); }
+
+        /* ═══════════════════════════════════════════════════════════════
+           TIMELINE
+           ═══════════════════════════════════════════════════════════════ */
+        .timeline { position: relative; margin: 2rem 0; padding-left: 30px; }
+        .timeline::before {
+            content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+            width: 2px; background: var(--border);
+        }
+        .timeline-item { position: relative; margin-bottom: 1.5rem; padding-left: 1rem; }
+        .timeline-item::before {
+            content: ''; position: absolute; left: -26px; top: 8px;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); border: 2px solid var(--bg);
+        }
+        .timeline-item .date {
+            font-size: 0.75rem; color: var(--accent);
+            text-transform: uppercase; letter-spacing: 0.1em;
+        }
+        .timeline-item h4 { color: var(--heading); margin: 0.2rem 0; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           PILLARS / STEP INDICATORS
+           ═══════════════════════════════════════════════════════════════ */
+        .step { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        .step-num {
+            flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+            background: var(--accent); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.85rem;
+        }
+        .step-body h4 { margin-bottom: 0.3rem; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           BADGES
+           ═══════════════════════════════════════════════════════════════ */
+        .badge {
+            display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.6rem;
+            border-radius: 999px; font-weight: 600; letter-spacing: 0.03em;
+        }
+        .badge.python { background: #306998; color: #ffe873; }
+        .badge.oss    { background: #238636; color: #fff; }
+        .badge.type   { background: var(--accent); color: #fff; }
+        .badge.new    { background: var(--accent3); color: #fff; }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LIVE TRACE DEMO
+           ═══════════════════════════════════════════════════════════════ */
+        .demo-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+        .demo-controls button {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-dim); padding: 0.55rem 1.1rem; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem; transition: all 0.2s;
+        }
+        .demo-controls button:hover { border-color: var(--accent); color: var(--text); }
+        .demo-controls button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .trace-viewer {
+            background: var(--bg-code); border: 1px solid var(--border);
+            border-radius: 10px; padding: 1.2rem; min-height: 280px;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.82rem; line-height: 1.8; overflow-y: auto; max-height: 440px;
+        }
+        .trace-line { opacity: 0; animation: traceFade 0.3s forwards; }
+        @keyframes traceFade { to { opacity: 1; } }
+        .trace-line .label { display: inline-block; min-width: 104px; font-weight: 600; }
+        .trace-line .label.user    { color: var(--text-dim); }
+        .trace-line .label.run     { color: var(--accent); }
+        .trace-line .label.tool    { color: var(--accent); }
+        .trace-line .label.observe { color: var(--accent2); }
+        .trace-line .label.validate{ color: #e879f9; }
+        .trace-line .label.retry   { color: var(--accent4); }
+        .trace-line .label.output  { color: var(--accent3); }
+
+        /* ═══════════════════════════════════════════════════════════════
+           FOOTER
+           ═══════════════════════════════════════════════════════════════ */
+        footer {
+            text-align: center; padding: 3rem 1rem; color: var(--text-dim);
+            font-size: 0.85rem; border-top: 1px solid var(--border);
+        }
+        footer a { color: var(--accent); }
+
+        /* ═══════════════════════════════════════════════════════════════
+           RESPONSIVE
+           ═══════════════════════════════════════════════════════════════ */
+        @media (max-width: 700px) {
+            .card-grid { grid-template-columns: 1fr; }
+            .flow { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+            table { font-size: 0.78rem; }
+            th, td { padding: 0.5rem 0.6rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAV TOGGLE -->
+<button class="nav-toggle" onclick="document.querySelector('nav').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+
+<!-- SIDEBAR NAV -->
+<nav id="main-nav">
+    <a href="#overview">Overview</a>
+    <a href="#anatomy">Agent Anatomy</a>
+    <a href="#running">Defining &amp; Running</a>
+    <a href="#outputs">Type-Safe Outputs</a>
+    <a href="#tools">Tools &amp; Function Calling</a>
+    <a href="#deps">Dependency Injection</a>
+    <a href="#validation">Validation &amp; Self-Correction</a>
+    <a href="#streaming">Streaming</a>
+    <a href="#models">Models &amp; Providers</a>
+    <a href="#messages">Messages &amp; History</a>
+    <a href="#graph">Pydantic Graph</a>
+    <a href="#durable">Durable Execution &amp; MCP</a>
+    <a href="#observability">Observability &amp; Evals</a>
+    <a href="#choosing">When to Choose It</a>
+    <a href="#demo">Live Demo</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="top">
+    <canvas id="heroCanvas"></canvas>
+    <div class="hero-content">
+        <span class="tag">LLM Hub · Agents &amp; Orchestration</span>
+        <h1>Pydantic AI<br><em>A Visual Deep Dive</em></h1>
+        <p>The agent framework from the team behind Pydantic — bringing the "FastAPI feeling" to GenAI. Type-safe agents, structured outputs, dependency injection, durable execution, and first-class observability.</p>
+        <a class="cta" href="#overview">Start the deep dive ↓</a>
+    </div>
+</div>
+
+<main>
+
+<!-- ================================================================
+     01 — OVERVIEW
+     ================================================================ -->
+<section id="overview">
+    <div class="section-label">01 Overview</div>
+    <h2>What Is Pydantic AI?</h2>
+    <p><strong>Pydantic AI</strong> is a Python agent framework built by the team behind <a href="https://docs.pydantic.dev/">Pydantic</a> — the validation library used by virtually every Python GenAI SDK (OpenAI, Anthropic, LangChain, the list goes on). Their pitch is simple: bring the ergonomics that made FastAPI the default web framework to the messy world of building LLM agents.</p>
+    <p>Where most frameworks bolt structure onto raw text, Pydantic AI treats <em>type-safety and validation as the foundation</em>. Your agent's output is a Pydantic model. Your tools' arguments are validated against their type hints. Your dependencies are injected with full type-checker support. When the model returns something that doesn't fit, the framework feeds the validation error back to the model and lets it correct itself.</p>
+
+    <div class="card-grid">
+        <div class="card">
+            <div class="icon">🧱</div>
+            <h4>Built by the Pydantic team</h4>
+            <p>From the people whose library powers the validation layer of the OpenAI SDK, LangChain, LlamaIndex and more. Pydantic AI is the agent layer on top of that foundation.</p>
+        </div>
+        <div class="card">
+            <div class="icon">🔒</div>
+            <h4>Type-safe by design</h4>
+            <p>Agents are generic over their dependency and output types. Your IDE and <code>mypy</code>/<code>pyright</code> catch mistakes before runtime, not after a 3am pager.</p>
+        </div>
+        <div class="card">
+            <div class="icon">🔌</div>
+            <h4>Model-agnostic</h4>
+            <p>OpenAI, Anthropic, Google, Groq, Mistral, Cohere, Bedrock, DeepSeek, Grok, Ollama, OpenRouter and more — swap providers with a single string.</p>
+        </div>
+        <div class="card">
+            <div class="icon">📊</div>
+            <h4>Observability built in</h4>
+            <p>Native <strong>Pydantic Logfire</strong> + OpenTelemetry integration. Every model call, tool call and validation retry is traced out of the box.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <p><strong>The one-liner.</strong> If LangGraph is "explicit graphs for control freaks" and CrewAI is "agents as a team of coworkers", Pydantic AI is <em>"agents as type-safe functions"</em> — minimal surface area, maximal validation, production-grade plumbing underneath.</p>
+    </div>
+
+    <h3>Hello, agent</h3>
+    <p class="code-label">hello.py</p>
+    <pre><code><span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+
+agent = Agent(
+    <span class="str">'anthropic:claude-sonnet-4-6'</span>,
+    instructions=<span class="str">'Be concise, reply with one sentence.'</span>,
+)
+
+result = agent.run_sync(<span class="str">'Where does "hello world" come from?'</span>)
+<span class="fn">print</span>(result.output)
+<span class="cm">#&gt; The first known use of "hello, world" was in a 1974 Bell Labs memo.</span></code></pre>
+
+    <div class="callout teal">
+        <p><span class="badge new">v1.104.0 · May 2026</span> &nbsp; Pydantic AI reached <strong>1.0 in 2025</strong> and now ships a stable API. This guide tracks the current 1.x surface — note that <code>result_type</code> → <code>output_type</code> and <code>result.data</code> → <code>result.output</code> were renamed on the road to 1.0, so older tutorials may differ.</p>
+    </div>
+</section>
+
+<!-- ================================================================
+     02 — AGENT ANATOMY
+     ================================================================ -->
+<section id="anatomy">
+    <div class="section-label">02 Agent Anatomy</div>
+    <h2>The Anatomy of an Agent</h2>
+    <p>An <code>Agent</code> is a reusable, declarative container — you define it once (typically at module scope, like a FastAPI <code>APIRouter</code>) and run it many times. It binds together five things:</p>
+
+    <div class="flow">
+        <div class="flow-node"><span class="icon">🤖</span>Model</div>
+        <span class="flow-arrow">+</span>
+        <div class="flow-node"><span class="icon">📜</span>Instructions</div>
+        <span class="flow-arrow">+</span>
+        <div class="flow-node"><span class="icon">📦</span>Deps type</div>
+        <span class="flow-arrow">+</span>
+        <div class="flow-node"><span class="icon">🎯</span>Output type</div>
+        <span class="flow-arrow">+</span>
+        <div class="flow-node"><span class="icon">🔧</span>Tools</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>Component</th><th>Constructor argument</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><strong>Model</strong></td><td><code>model</code></td><td>Which LLM to call, as a <code>'provider:model'</code> string or a model object. Can be overridden per-run.</td></tr>
+            <tr><td><strong>Instructions</strong></td><td><code>instructions</code></td><td>The system guidance. Static strings, or dynamic functions decorated with <code>@agent.instructions</code>.</td></tr>
+            <tr><td><strong>Dependencies</strong></td><td><code>deps_type</code></td><td>A type (often a dataclass) describing what the agent's tools and prompts need at runtime — DB connections, API clients, the current user.</td></tr>
+            <tr><td><strong>Output</strong></td><td><code>output_type</code></td><td>The validated return type. Defaults to <code>str</code>; set it to a Pydantic model, dataclass, union or function for structured results.</td></tr>
+            <tr><td><strong>Tools</strong></td><td><code>@agent.tool</code></td><td>Functions the model can call. Registered via decorator; their signature becomes the JSON schema the model sees.</td></tr>
+            <tr><td><strong>Retries</strong></td><td><code>retries</code></td><td>How many times the agent may self-correct on a validation or tool error before giving up.</td></tr>
+        </tbody>
+    </table>
+
+    <p class="code-label">A fully-typed agent at a glance</p>
+    <pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+<span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent, RunContext
+
+
+<span class="dec">@dataclass</span>
+<span class="kw">class</span> <span class="cls">SupportDeps</span>:           <span class="cm"># injected at run time</span>
+    customer_id: <span class="cls">int</span>
+    db: <span class="cls">DatabaseConn</span>
+
+
+<span class="kw">class</span> <span class="cls">SupportOutput</span>(BaseModel):  <span class="cm"># validated result</span>
+    advice: <span class="cls">str</span>
+    block_card: <span class="cls">bool</span>
+    risk: <span class="cls">int</span>
+
+
+support_agent = Agent(
+    <span class="str">'openai:gpt-5.2'</span>,
+    deps_type=SupportDeps,
+    output_type=SupportOutput,
+    instructions=<span class="str">'You are a support agent for a bank. Assess risk 0-10.'</span>,
+)</code></pre>
+
+    <div class="callout">
+        <p><strong>Generics matter.</strong> <code>support_agent</code> has the static type <code>Agent[SupportDeps, SupportOutput]</code>. Pass the wrong deps to <code>.run()</code> and your type-checker complains before the code ever runs. This is the single biggest day-to-day difference from string-in/string-out frameworks.</p>
+    </div>
+</section>
+
+<!-- ================================================================
+     03 — DEFINING & RUNNING
+     ================================================================ -->
+<section id="running">
+    <div class="section-label">03 Defining &amp; Running</div>
+    <h2>Running an Agent</h2>
+    <p>There are four ways to execute an agent, all sharing the same configuration. Pick based on your runtime and how much control you need over the loop.</p>
+
+    <div class="card-grid">
+        <div class="card">
+            <h4><code>await agent.run()</code></h4>
+            <p>The async workhorse. Returns an <code>AgentRunResult</code> once the run completes.</p>
+        </div>
+        <div class="card">
+            <h4><code>agent.run_sync()</code></h4>
+            <p>A blocking wrapper around <code>run()</code> for scripts, notebooks and sync codebases.</p>
+        </div>
+        <div class="card">
+            <h4><code>agent.run_stream()</code></h4>
+            <p>An async context manager that streams the response — text or structured — as it arrives.</p>
+        </div>
+        <div class="card">
+            <h4><code>agent.iter()</code></h4>
+            <p>Iterate the underlying graph node-by-node for full control and inspection of every step.</p>
+        </div>
+    </div>
+
+    <p class="code-label">Three run styles, one agent</p>
+    <pre><code><span class="kw">import</span> asyncio
+<span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+
+agent = Agent(<span class="str">'google:gemini-2.5-flash'</span>)
+
+<span class="cm"># 1 — synchronous</span>
+result = agent.run_sync(<span class="str">'What is the capital of Italy?'</span>)
+<span class="fn">print</span>(result.output)        <span class="cm">#&gt; Rome</span>
+<span class="fn">print</span>(result.usage())       <span class="cm"># RunUsage(input_tokens=..., output_tokens=...)</span>
+
+<span class="cm"># 2 — async</span>
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">main</span>():
+    result = <span class="kw">await</span> agent.run(<span class="str">'What is the capital of France?'</span>)
+    <span class="fn">print</span>(result.output)    <span class="cm">#&gt; Paris</span>
+
+    <span class="cm"># 3 — streaming</span>
+    <span class="kw">async</span> <span class="kw">with</span> agent.run_stream(<span class="str">'Name three Italian cities.'</span>) <span class="kw">as</span> response:
+        <span class="kw">async</span> <span class="kw">for</span> chunk <span class="kw">in</span> response.stream_text(delta=<span class="kw">True</span>):
+            <span class="fn">print</span>(chunk, end=<span class="str">''</span>)
+
+asyncio.run(main())</code></pre>
+
+    <h3>The result object</h3>
+    <p>Every completed run returns a result exposing the validated <code>.output</code>, token <code>.usage()</code>, and the full message log for the conversation:</p>
+    <pre><code>result = agent.run_sync(<span class="str">'How many moons does Mars have?'</span>)
+
+result.output            <span class="cm"># the validated, typed answer</span>
+result.usage()           <span class="cm"># token + request counts for cost tracking</span>
+result.all_messages()    <span class="cm"># every ModelRequest / ModelResponse in the run</span>
+result.new_messages()    <span class="cm"># just the messages from this run (for history)</span></code></pre>
+</section>
+
+<!-- ================================================================
+     04 — TYPE-SAFE OUTPUTS
+     ================================================================ -->
+<section id="outputs">
+    <div class="section-label">04 Type-Safe Outputs</div>
+    <h2>Structured, Validated Outputs</h2>
+    <p>This is Pydantic AI's headline feature. Set <code>output_type</code> to anything Pydantic can validate and the framework instructs the model to produce matching data, parses it, and validates it — handing you back a real Python object, not a string you have to <code>json.loads()</code> and pray over.</p>
+
+    <p class="code-label">A Pydantic model as the output type</p>
+    <pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+<span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+
+
+<span class="kw">class</span> <span class="cls">CityLocation</span>(BaseModel):
+    city: <span class="cls">str</span>
+    country: <span class="cls">str</span>
+    population: <span class="cls">int</span>
+
+
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, output_type=CityLocation)
+
+result = agent.run_sync(<span class="str">'Where were the 2012 Olympics held?'</span>)
+<span class="fn">print</span>(result.output)
+<span class="cm">#&gt; city='London' country='United Kingdom' population=8866000</span>
+<span class="fn">print</span>(result.output.population)   <span class="cm"># a real int, fully type-checked</span></code></pre>
+
+    <h3>Beyond a single model</h3>
+    <ul>
+        <li><strong>Unions</strong> — <code>output_type=Success | Clarify</code> lets the model choose between outcomes (e.g. "I answered" vs "I need more info"). The framework exposes each as a separate tool to the model.</li>
+        <li><strong>Output functions</strong> — pass a function as the output type and the model's structured call is routed through your code, which can run logic and even raise <code>ModelRetry</code>.</li>
+        <li><strong>Output validators</strong> — register <code>@agent.output_validator</code> for cross-field or I/O-bound checks that need <code>RunContext</code> (e.g. "does this SQL actually execute?").</li>
+        <li><strong>Native vs tool output</strong> — Pydantic AI uses provider-native structured output (JSON schema / grammar) where available, and falls back to tool-calling otherwise — transparently.</li>
+    </ul>
+
+    <p class="code-label">An output validator that re-prompts on failure</p>
+    <pre><code><span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent, ModelRetry, RunContext
+
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, output_type=<span class="cls">str</span>, deps_type=DatabaseConn)
+
+
+<span class="dec">@agent.output_validator</span>
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">validate_sql</span>(ctx: RunContext[DatabaseConn], query: <span class="cls">str</span>) -&gt; <span class="cls">str</span>:
+    <span class="kw">try</span>:
+        <span class="kw">await</span> ctx.deps.explain(query)        <span class="cm"># dry-run the SQL</span>
+    <span class="kw">except</span> QueryError <span class="kw">as</span> e:
+        <span class="kw">raise</span> ModelRetry(<span class="str">f'Invalid query: {e}. Try again.'</span>)  <span class="cm"># model self-corrects</span>
+    <span class="kw">return</span> query</code></pre>
+</section>
+
+<!-- ================================================================
+     05 — TOOLS
+     ================================================================ -->
+<section id="tools">
+    <div class="section-label">05 Tools &amp; Function Calling</div>
+    <h2>Tools &amp; Function Calling</h2>
+    <p>Tools are how an agent reaches outside the model — querying a database, calling an API, doing maths. In Pydantic AI you write a plain Python function with type hints and a docstring; the framework derives the JSON schema the model sees from your signature, validates the model's arguments against it, and dispatches the call.</p>
+
+    <h3>Two decorators</h3>
+    <div class="card-grid">
+        <div class="card">
+            <h4><code>@agent.tool</code></h4>
+            <p>For tools that need run context. The first parameter is <code>ctx: RunContext[Deps]</code>, giving the tool typed access to dependencies, usage, retry count and message history.</p>
+        </div>
+        <div class="card">
+            <h4><code>@agent.tool_plain</code></h4>
+            <p>For context-free tools — pure functions of their arguments. No <code>RunContext</code> parameter.</p>
+        </div>
+    </div>
+
+    <p class="code-label">A context-aware tool, with docstring-derived schema</p>
+    <pre><code><span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent, RunContext
+
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, deps_type=SupportDeps)
+
+
+<span class="dec">@agent.tool</span>
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">customer_balance</span>(
+    ctx: RunContext[SupportDeps], include_pending: <span class="cls">bool</span>
+) -&gt; <span class="cls">float</span>:
+    <span class="str">"""Return the customer's current account balance.
+
+    Args:
+        include_pending: Whether to include pending transactions.
+    """</span>
+    <span class="kw">return</span> <span class="kw">await</span> ctx.deps.db.get_balance(
+        id=ctx.deps.customer_id, pending=include_pending
+    )
+
+
+<span class="dec">@agent.tool_plain</span>
+<span class="kw">def</span> <span class="fn">roll_die</span>() -&gt; <span class="cls">int</span>:
+    <span class="str">"""Roll a six-sided die and return the result."""</span>
+    <span class="kw">return</span> random.randint(<span class="num">1</span>, <span class="num">6</span>)</code></pre>
+
+    <div class="callout">
+        <p><strong>Docstrings become documentation the model reads.</strong> Pydantic AI parses Google-, NumPy- and Sphinx-style docstrings to populate parameter descriptions in the JSON schema. Good docstrings → better tool use. The function's type hints become the parameter types, validated by Pydantic before your code runs.</p>
+    </div>
+
+    <h3>Tool-level retries</h3>
+    <p>A tool can raise <code>ModelRetry</code> to tell the model "that didn't work, here's why — try again" without crashing the run. This turns a tool into a self-correcting conversation:</p>
+    <pre><code><span class="dec">@agent.tool</span>
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">get_user</span>(ctx: RunContext[Deps], name: <span class="cls">str</span>) -&gt; <span class="cls">User</span>:
+    <span class="str">"""Look up a user by their full name."""</span>
+    user = <span class="kw">await</span> ctx.deps.db.find_user(name)
+    <span class="kw">if</span> user <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">raise</span> ModelRetry(
+            <span class="str">f'No user named {name!r}. Ask the customer for their full legal name.'</span>
+        )
+    <span class="kw">return</span> user</code></pre>
+    <p>Other ways to register tools: pass a list via <code>Agent(..., tools=[...])</code>, use <code>Tool</code> objects for fine-grained control, or attach <strong>toolsets</strong> — reusable, composable bundles of tools (including remote ones over MCP).</p>
+</section>
+
+<!-- ================================================================
+     06 — DEPENDENCY INJECTION
+     ================================================================ -->
+<section id="deps">
+    <div class="section-label">06 Dependency Injection</div>
+    <h2>Dependency Injection</h2>
+    <p>Borrowed straight from FastAPI: rather than reaching for globals, your tools and dynamic instructions declare what they need, and you supply it at run time. The dependencies are typed, so the wrong shape is a type error — and trivially swappable for tests.</p>
+
+    <p class="code-label">Declare deps, inject at run time</p>
+    <pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">import</span> httpx
+<span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent, RunContext
+
+
+<span class="dec">@dataclass</span>
+<span class="kw">class</span> <span class="cls">Deps</span>:
+    http_client: httpx.AsyncClient
+    api_key: <span class="cls">str</span>
+
+
+weather_agent = Agent(<span class="str">'anthropic:claude-sonnet-4-6'</span>, deps_type=Deps)
+
+
+<span class="dec">@weather_agent.instructions</span>      <span class="cm"># dynamic, per-run system guidance</span>
+<span class="kw">def</span> <span class="fn">add_units</span>(ctx: RunContext[Deps]) -&gt; <span class="cls">str</span>:
+    <span class="kw">return</span> <span class="str">'Always report temperatures in Celsius.'</span>
+
+
+<span class="dec">@weather_agent.tool</span>
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">get_forecast</span>(ctx: RunContext[Deps], city: <span class="cls">str</span>) -&gt; <span class="cls">dict</span>:
+    <span class="str">"""Fetch the forecast for a city."""</span>
+    r = <span class="kw">await</span> ctx.deps.http_client.get(
+        <span class="str">'https://api.weather.example'</span>,
+        params={<span class="str">'q'</span>: city, <span class="str">'key'</span>: ctx.deps.api_key},
+    )
+    <span class="kw">return</span> r.json()
+
+
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">main</span>():
+    <span class="kw">async</span> <span class="kw">with</span> httpx.AsyncClient() <span class="kw">as</span> client:
+        deps = Deps(http_client=client, api_key=<span class="str">'...'</span>)
+        result = <span class="kw">await</span> weather_agent.run(<span class="str">'Will it rain in Leeds?'</span>, deps=deps)
+        <span class="fn">print</span>(result.output)</code></pre>
+
+    <div class="callout teal">
+        <p><strong>Why this is a big deal for testing.</strong> Because deps are injected, you can construct a fake <code>Deps</code> in a unit test and run the agent against a stub database with zero monkeypatching. Combined with <code>TestModel</code> (see §13), you get fully offline, deterministic agent tests.</p>
+    </div>
+</section>
+
+<!-- ================================================================
+     07 — VALIDATION & SELF-CORRECTION
+     ================================================================ -->
+<section id="validation">
+    <div class="section-label">07 Validation &amp; Self-Correction</div>
+    <h2>The Self-Correction Loop</h2>
+    <p>Pydantic AI's "reflection" is what turns validation from a wall into a feedback channel. When the model produces output or tool arguments that fail Pydantic validation — or when your code raises <code>ModelRetry</code> — the error message is sent back to the model as a new request, and the model tries again, up to the configured <code>retries</code> limit.</p>
+
+    <div class="flow">
+        <div class="flow-node"><span class="icon">🤖</span>Model responds</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node"><span class="icon">✅</span>Validate</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-node hl"><span class="icon">🎯</span>Valid? Return</div>
+        <span class="flow-arrow">↻</span>
+        <div class="flow-node"><span class="icon">⚠️</span>Invalid? Re-prompt with error</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>Trigger</th><th>Source</th><th>What the model sees</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Output fails schema</td><td>Pydantic validation</td><td>The structured validation error, field-by-field</td></tr>
+            <tr><td>Tool args fail schema</td><td>Pydantic validation</td><td>Which argument was wrong and why</td></tr>
+            <tr><td><code>raise ModelRetry(msg)</code></td><td>Your tool / validator</td><td>Your custom message — domain-specific guidance</td></tr>
+        </tbody>
+    </table>
+
+    <p class="code-label">Setting the retry budget</p>
+    <pre><code><span class="cm"># Whole-agent default</span>
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, output_type=SupportOutput, retries=<span class="num">3</span>)
+
+<span class="cm"># Per-tool override</span>
+<span class="dec">@agent.tool</span>(retries=<span class="num">5</span>)
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">flaky_lookup</span>(ctx: RunContext[Deps], q: <span class="cls">str</span>) -&gt; <span class="cls">str</span>:
+    ...</code></pre>
+    <p>If retries are exhausted, the agent raises <code>UnexpectedModelBehavior</code> — a clean, catchable signal rather than a silently-wrong answer.</p>
+</section>
+
+<!-- ================================================================
+     08 — STREAMING
+     ================================================================ -->
+<section id="streaming">
+    <div class="section-label">08 Streaming</div>
+    <h2>Streaming — Including Structured Output</h2>
+    <p>Plenty of frameworks stream text tokens. Pydantic AI's trick is streaming <em>structured</em> output: as the JSON arrives, it is progressively parsed and validated, so you can render a partial, type-safe object live — and reject malformed partials before they reach your UI.</p>
+
+    <p class="code-label">Streaming validated, partial structured output</p>
+    <pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+<span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+
+
+<span class="kw">class</span> <span class="cls">UserProfile</span>(BaseModel):
+    name: <span class="cls">str</span>
+    age: <span class="cls">int</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    interests: <span class="cls">list</span>[<span class="cls">str</span>] = []
+
+
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, output_type=UserProfile)
+
+
+<span class="kw">async</span> <span class="kw">def</span> <span class="fn">main</span>():
+    <span class="kw">async</span> <span class="kw">with</span> agent.run_stream(<span class="str">'Build a profile for a hiker named Sam.'</span>) <span class="kw">as</span> response:
+        <span class="kw">async</span> <span class="kw">for</span> profile <span class="kw">in</span> response.stream_output():
+            <span class="fn">print</span>(profile)   <span class="cm"># a validated (possibly partial) UserProfile each step</span></code></pre>
+
+    <ul>
+        <li><code>stream_text(delta=True)</code> — token deltas for plain-text agents.</li>
+        <li><code>stream_output()</code> — progressively-validated structured objects.</li>
+        <li><code>agent.iter()</code> — drop down to the node level to observe model requests, tool calls and the end node as they happen.</li>
+    </ul>
+</section>
+
+<!-- ================================================================
+     09 — MODELS & PROVIDERS
+     ================================================================ -->
+<section id="models">
+    <div class="section-label">09 Models &amp; Providers</div>
+    <h2>Models &amp; Providers</h2>
+    <p>A model is just a string: <code>'provider:model-name'</code>. Switching from OpenAI to Anthropic to a local Ollama model is a one-line change — your tools, deps and output types are untouched.</p>
+
+    <table>
+        <thead>
+            <tr><th>Provider</th><th>Example string</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>OpenAI</td><td><code>'openai:gpt-5.2'</code></td><td>Native structured output &amp; tool calling</td></tr>
+            <tr><td>Anthropic</td><td><code>'anthropic:claude-sonnet-4-6'</code></td><td>Tool use, prompt caching</td></tr>
+            <tr><td>Google</td><td><code>'google:gemini-2.5-flash'</code></td><td>Gemini Developer API &amp; Vertex</td></tr>
+            <tr><td>Groq</td><td><code>'groq:llama-3.3-70b'</code></td><td>Ultra-low-latency inference</td></tr>
+            <tr><td>Mistral / Cohere / DeepSeek / Grok</td><td><code>'mistral:...'</code> etc.</td><td>First-party clients</td></tr>
+            <tr><td>Amazon Bedrock / Azure / Vertex</td><td>provider objects</td><td>Enterprise cloud gateways</td></tr>
+            <tr><td>Ollama / OpenRouter / Together / LiteLLM</td><td>OpenAI-compatible</td><td>Self-hosted &amp; aggregators via a custom base URL</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Fallback models</h3>
+    <p>Wrap several models in a <code>FallbackModel</code> and Pydantic AI tries them in order, moving to the next on error — instant resilience against a provider outage or rate limit.</p>
+    <pre><code><span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+<span class="kw">from</span> pydantic_ai.models.fallback <span class="kw">import</span> FallbackModel
+<span class="kw">from</span> pydantic_ai.models.openai <span class="kw">import</span> OpenAIChatModel
+<span class="kw">from</span> pydantic_ai.models.anthropic <span class="kw">import</span> AnthropicModel
+
+fallback = FallbackModel(
+    OpenAIChatModel(<span class="str">'gpt-5.2'</span>),
+    AnthropicModel(<span class="str">'claude-sonnet-4-6'</span>),
+)
+agent = Agent(fallback)   <span class="cm"># try OpenAI, fall back to Anthropic on failure</span></code></pre>
+</section>
+
+<!-- ================================================================
+     10 — MESSAGES & HISTORY
+     ================================================================ -->
+<section id="messages">
+    <div class="section-label">10 Messages &amp; History</div>
+    <h2>Messages &amp; Conversation History</h2>
+    <p>Agents are stateless between runs — you carry the conversation forward explicitly by passing the previous messages back in. This keeps the model honest about context and makes persistence trivial: the message log is just data you can serialise to a database.</p>
+
+    <p class="code-label">A multi-turn conversation</p>
+    <pre><code>agent = Agent(<span class="str">'openai:gpt-5.2'</span>, instructions=<span class="str">'Be a helpful assistant.'</span>)
+
+<span class="cm"># Turn 1</span>
+r1 = agent.run_sync(<span class="str">'Who wrote Pride and Prejudice?'</span>)
+<span class="fn">print</span>(r1.output)   <span class="cm">#&gt; Jane Austen</span>
+
+<span class="cm"># Turn 2 — feed the prior messages back in</span>
+r2 = agent.run_sync(
+    <span class="str">'When was she born?'</span>,
+    message_history=r1.new_messages(),
+)
+<span class="fn">print</span>(r2.output)   <span class="cm">#&gt; Jane Austen was born on 16 December 1775.</span></code></pre>
+
+    <ul>
+        <li><code>result.all_messages()</code> / <code>result.new_messages()</code> — the message log, as structured <code>ModelMessage</code> objects.</li>
+        <li><code>*_json()</code> variants — serialise to JSON for storage, then reload to resume a conversation later.</li>
+        <li><strong>History processors</strong> — register functions to summarise or trim history before each model call, controlling context-window cost on long chats.</li>
+    </ul>
+</section>
+
+<!-- ================================================================
+     11 — PYDANTIC GRAPH
+     ================================================================ -->
+<section id="graph">
+    <div class="section-label">11 Pydantic Graph</div>
+    <h2>Pydantic Graph — For Complex Workflows</h2>
+    <p>For most agents the built-in run loop is all you need. When control flow gets genuinely complex — multi-stage pipelines, explicit state machines, human approval gates — Pydantic AI offers <code>pydantic-graph</code>: a standalone, async graph library defined with <em>type hints</em> rather than decorators or DSLs. (Pydantic AI's own agent loop is built on it.)</p>
+
+    <p class="code-label">Nodes as dataclasses; edges as return types</p>
+    <pre><code><span class="kw">from</span> __future__ <span class="kw">import</span> annotations
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> pydantic_graph <span class="kw">import</span> BaseNode, End, Graph, GraphRunContext
+
+
+<span class="dec">@dataclass</span>
+<span class="kw">class</span> <span class="cls">Ingest</span>(BaseNode):
+    <span class="kw">async</span> <span class="kw">def</span> <span class="fn">run</span>(self, ctx: GraphRunContext) -&gt; <span class="cls">Analyse</span>:
+        <span class="kw">return</span> Analyse()
+
+
+<span class="dec">@dataclass</span>
+<span class="kw">class</span> <span class="cls">Analyse</span>(BaseNode[<span class="cls">None</span>, <span class="cls">None</span>, <span class="cls">str</span>]):
+    <span class="kw">async</span> <span class="kw">def</span> <span class="fn">run</span>(self, ctx: GraphRunContext) -&gt; End[<span class="cls">str</span>]:
+        <span class="kw">return</span> End(<span class="str">'done'</span>)            <span class="cm"># End[T] terminates the graph</span>
+
+
+graph = Graph(nodes=[Ingest, Analyse])
+result = graph.run_sync(Ingest())
+<span class="fn">print</span>(result.output)   <span class="cm">#&gt; done</span></code></pre>
+
+    <div class="callout">
+        <p><strong>The return type <em>is</em> the edge.</strong> A node's <code>run()</code> returns the next node (or <code>End</code>), so the graph's structure is statically known to your type-checker. No separate "add_edge" wiring to drift out of sync with the code. Graph state is a typed object threaded through every node via <code>ctx.state</code>, and runs are durable — they can be persisted and resumed.</p>
+    </div>
+</section>
+
+<!-- ================================================================
+     12 — DURABLE EXECUTION & MCP
+     ================================================================ -->
+<section id="durable">
+    <div class="section-label">12 Durable Execution &amp; MCP</div>
+    <h2>Durable Execution, MCP &amp; Human-in-the-Loop</h2>
+    <p>Production agents are long-running, fail mid-flight, and increasingly need to talk to external tool servers and pause for human approval. Pydantic AI ships first-class support for all three.</p>
+
+    <h3>Durable execution</h3>
+    <p>Wrap an agent so its runs survive process crashes, retries and multi-hour waits by delegating orchestration to a durable engine. Pydantic AI integrates with:</p>
+    <div class="card-grid">
+        <div class="card"><h4>Temporal</h4><p>Workflow engine — each model and tool call becomes a durable, replayable activity.</p></div>
+        <div class="card"><h4>DBOS</h4><p>Lightweight durable execution backed by Postgres, no separate server.</p></div>
+        <div class="card"><h4>Prefect</h4><p>Data-workflow orchestration with retries, observability and scheduling.</p></div>
+        <div class="card"><h4>Restate</h4><p>Durable, resilient handlers for long-running, stateful agent workflows.</p></div>
+    </div>
+
+    <h3>Model Context Protocol (MCP)</h3>
+    <p>Pydantic AI is both an <strong>MCP client</strong> — connect to any MCP server and expose its tools to your agent as a toolset — and supports being used inside <strong>MCP servers</strong>. This plugs agents into the wider tool ecosystem without bespoke integrations.</p>
+    <pre><code><span class="kw">from</span> pydantic_ai <span class="kw">import</span> Agent
+<span class="kw">from</span> pydantic_ai.mcp <span class="kw">import</span> MCPServerStdio
+
+server = MCPServerStdio(<span class="str">'npx'</span>, args=[<span class="str">'-y'</span>, <span class="str">'@modelcontextprotocol/server-filesystem'</span>, <span class="str">'.'</span>])
+agent = Agent(<span class="str">'openai:gpt-5.2'</span>, toolsets=[server])   <span class="cm"># remote tools, locally typed</span></code></pre>
+
+    <h3>Human-in-the-loop &amp; AG-UI</h3>
+    <p>Tools can require <strong>approval</strong> before they execute — the run pauses, surfaces the proposed call, and resumes once a human (or policy) signs off. Pydantic AI also implements <strong>AG-UI</strong> and <strong>A2A</strong> standards for streaming agent state to front-ends and coordinating between agents.</p>
+</section>
+
+<!-- ================================================================
+     13 — OBSERVABILITY & EVALS
+     ================================================================ -->
+<section id="observability">
+    <div class="section-label">13 Observability &amp; Evals</div>
+    <h2>Observability, Evals &amp; Testing</h2>
+    <p>Because the framework comes from the Pydantic/Logfire team, the production story is unusually complete — debugging, evaluation and testing are all first-class rather than afterthoughts.</p>
+
+    <h3>Logfire &amp; OpenTelemetry</h3>
+    <p>Add a few lines and every agent run is traced: the prompt, each model request/response, every tool call, token usage and validation retries — viewable as a waterfall. Logfire is built on OpenTelemetry, so traces also flow to any OTel backend (Jaeger, Grafana, Honeycomb…).</p>
+    <pre><code><span class="kw">import</span> logfire
+
+logfire.configure()
+logfire.instrument_pydantic_ai()    <span class="cm"># every run now traced automatically</span></code></pre>
+
+    <h3>Pydantic Evals</h3>
+    <p><code>pydantic-evals</code> is a sister package for systematic evaluation: define datasets of cases, run your agent over them, and score with built-in or custom evaluators (exact match, LLM-as-judge, latency, assertions). Evals are the difference between "it worked in the demo" and "it works on the 200 cases that matter".</p>
+
+    <h3>Testing with TestModel &amp; FunctionModel</h3>
+    <p>You should never hit a real LLM in a unit test. Pydantic AI provides drop-in fake models:</p>
+    <table>
+        <thead><tr><th>Tool</th><th>Use it for</th></tr></thead>
+        <tbody>
+            <tr><td><code>TestModel</code></td><td>Auto-generates schema-valid outputs and exercises every tool — zero-config smoke tests.</td></tr>
+            <tr><td><code>FunctionModel</code></td><td>You write a function that plays the model — assert on exactly what the agent sends and control every reply.</td></tr>
+            <tr><td><code>Agent.override(model=...)</code></td><td>Swap the model (and deps) inside a test without touching production code.</td></tr>
+            <tr><td><code>capture_run_messages()</code></td><td>Inspect the full message exchange to assert on tool calls and retries.</td></tr>
+        </tbody>
+    </table>
+    <pre><code><span class="kw">from</span> pydantic_ai.models.test <span class="kw">import</span> TestModel
+
+<span class="kw">def</span> <span class="fn">test_support_agent</span>():
+    <span class="kw">with</span> support_agent.override(model=TestModel()):
+        result = support_agent.run_sync(<span class="str">'My card was stolen!'</span>, deps=fake_deps)
+    <span class="kw">assert</span> <span class="fn">isinstance</span>(result.output, SupportOutput)   <span class="cm"># offline, deterministic</span></code></pre>
+</section>
+
+<!-- ================================================================
+     14 — WHEN TO CHOOSE IT
+     ================================================================ -->
+<section id="choosing">
+    <div class="section-label">14 When to Choose It</div>
+    <h2>When to Reach for Pydantic AI</h2>
+    <div class="card-grid">
+        <div class="card">
+            <h4>✅ Great fit</h4>
+            <ul>
+                <li>You're a Python shop that already lives in Pydantic / FastAPI.</li>
+                <li>Structured, validated output is central (extraction, classification, form-filling).</li>
+                <li>You value type-safety, testability and clean DI over a giant feature surface.</li>
+                <li>You want production observability and evals without bolting on a separate stack.</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h4>🤔 Consider alternatives</h4>
+            <ul>
+                <li>You need a vast pre-built integration/tool catalogue today → LangChain ecosystem.</li>
+                <li>Your problem is fundamentally a hand-drawn state graph → LangGraph (though Pydantic Graph overlaps).</li>
+                <li>You want a "team of role-playing coworkers" metaphor → CrewAI.</li>
+                <li>You're not in Python.</li>
+            </ul>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>Dimension</th><th>Pydantic AI</th><th>LangGraph</th><th>CrewAI</th><th>OpenAI Agents SDK</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Core metaphor</td><td>Type-safe function</td><td>State graph</td><td>Role-based crew</td><td>Agents + handoffs</td></tr>
+            <tr><td>Structured output</td><td>★★★★★</td><td>★★★☆☆</td><td>★★★☆☆</td><td>★★★★☆</td></tr>
+            <tr><td>Learning curve</td><td>Easy</td><td>Steep</td><td>Easy</td><td>Easy</td></tr>
+            <tr><td>Type-safety / DI</td><td>★★★★★</td><td>★★★☆☆</td><td>★★☆☆☆</td><td>★★★☆☆</td></tr>
+            <tr><td>Observability</td><td>Native (Logfire)</td><td>LangSmith</td><td>Built-in</td><td>Built-in</td></tr>
+            <tr><td>Durable execution</td><td>Temporal/DBOS/Prefect</td><td>Checkpointing</td><td>Flows</td><td>—</td></tr>
+        </tbody>
+    </table>
+    <div class="callout teal">
+        <p><strong>Bottom line.</strong> Pydantic AI is the framework to beat when correctness, types and production hygiene matter more than breadth of pre-built components. It's small enough to read in an afternoon and serious enough to ship.</p>
+    </div>
+</section>
+
+<!-- ================================================================
+     15 — LIVE DEMO
+     ================================================================ -->
+<section id="demo">
+    <div class="section-label">15 Live Demo</div>
+    <h2>An Agent Run, Step by Step</h2>
+    <p>Watch how a single <code>support_agent.run_sync()</code> call plays out — including a tool call and a validation-driven self-correction. Pick a scenario:</p>
+    <div class="demo-controls">
+        <button data-trace="happy" class="active">Happy path</button>
+        <button data-trace="retry">Validation retry</button>
+        <button data-trace="tool">Tool ModelRetry</button>
+    </div>
+    <div class="trace-viewer" id="traceViewer"></div>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.8rem;">Illustrative trace — the kind of waterfall Logfire renders for a real run.</p>
+</section>
+
+</main>
+
+<footer>
+    <p>Part of the <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_Agents">Agents &amp; Orchestration</a> series &mdash; itself part of the <a href="https://github.com/BrendanJamesLynskey/LLMs">LLMs hub</a>, an index of presentation series for AI/LLM engineers.</p>
+    <p style="margin-top:0.6rem;">Single-file HTML · no dependencies · served on GitHub Pages. Reflects Pydantic AI v1.x (May 2026).</p>
+</footer>
+
+<script>
+// ────────────────────────────────────────────
+// HERO CANVAS — animated network graph
+// ────────────────────────────────────────────
+(function() {
+    const c = document.getElementById('heroCanvas');
+    const ctx = c.getContext('2d');
+    const nodes = [];
+    const N = 52;
+
+    function resize() {
+        c.width = c.offsetWidth * devicePixelRatio;
+        c.height = c.offsetHeight * devicePixelRatio;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(devicePixelRatio, devicePixelRatio);
+    }
+
+    function init() {
+        resize();
+        for (let i = 0; i < N; i++) {
+            nodes.push({
+                x: Math.random() * c.offsetWidth,
+                y: Math.random() * c.offsetHeight,
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.4,
+                r: Math.random() * 2 + 1.5
+            });
+        }
+        animate();
+    }
+
+    function animate() {
+        const w = c.offsetWidth, h = c.offsetHeight;
+        ctx.clearRect(0, 0, w, h);
+        for (const n of nodes) {
+            n.x += n.vx; n.y += n.vy;
+            if (n.x < 0 || n.x > w) n.vx *= -1;
+            if (n.y < 0 || n.y > h) n.vy *= -1;
+        }
+        for (let i = 0; i < N; i++) {
+            for (let j = i + 1; j < N; j++) {
+                const dx = nodes[i].x - nodes[j].x;
+                const dy = nodes[i].y - nodes[j].y;
+                const d = Math.sqrt(dx*dx + dy*dy);
+                if (d < 150) {
+                    ctx.strokeStyle = `rgba(108,99,255,${0.15 * (1 - d/150)})`;
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(nodes[i].x, nodes[i].y);
+                    ctx.lineTo(nodes[j].x, nodes[j].y);
+                    ctx.stroke();
+                }
+            }
+        }
+        for (const n of nodes) {
+            ctx.fillStyle = 'rgba(108,99,255,0.6)';
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+            ctx.fill();
+        }
+        requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', resize);
+    init();
+})();
+
+// ────────────────────────────────────────────
+// NAV ACTIVE STATE
+// ────────────────────────────────────────────
+(function() {
+    const links = document.querySelectorAll('nav a');
+    const sections = [...document.querySelectorAll('section')];
+    window.addEventListener('scroll', () => {
+        const y = window.scrollY + 120;
+        let current = '';
+        for (const s of sections) {
+            if (s.offsetTop <= y) current = s.id;
+        }
+        links.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+        });
+    });
+    links.forEach(a => a.addEventListener('click', () => {
+        document.querySelector('nav').classList.remove('open');
+    }));
+})();
+
+// ────────────────────────────────────────────
+// LIVE TRACE DEMO
+// ────────────────────────────────────────────
+(function() {
+    const traces = {
+        happy: [
+            ['user',     'My card was stolen, what do I do?'],
+            ['run',      'support_agent.run_sync(...)  deps=SupportDeps(customer_id=42)'],
+            ['run',      'ModelRequest → openai:gpt-5.2  (instructions + history + tool schemas)'],
+            ['tool',     'model calls customer_balance(include_pending=True)'],
+            ['observe',  'tool returns 1240.55  (validated against -> float)'],
+            ['run',      'ModelRequest → openai:gpt-5.2  (tool result fed back)'],
+            ['validate', 'parse final response against SupportOutput …'],
+            ['output',   "SupportOutput(advice='Card blocked. A replacement is on its way.',"],
+            ['output',   '              block_card=True, risk=8)  ✓ valid'],
+        ],
+        retry: [
+            ['user',     'My card was stolen, what do I do?'],
+            ['run',      'support_agent.run_sync(...)  retries=3'],
+            ['run',      'ModelRequest → openai:gpt-5.2'],
+            ['validate', 'parse response against SupportOutput …'],
+            ['retry',    "ValidationError: risk=12 > le=10  →  ModelRetry sent back to model"],
+            ['run',      'ModelRequest → openai:gpt-5.2  (error message included)'],
+            ['validate', 'parse corrected response …'],
+            ['output',   "SupportOutput(advice='Card blocked.', block_card=True, risk=9)  ✓ valid"],
+        ],
+        tool: [
+            ['user',     'Block the card for customer Jane Doe.'],
+            ['run',      'support_agent.run_sync(...)'],
+            ['tool',     "model calls get_user(name='Jane')"],
+            ['retry',    "raise ModelRetry('No user named \\'Jane\\'. Ask for full legal name.')"],
+            ['run',      'ModelRequest → model  (retry message included)'],
+            ['tool',     "model calls get_user(name='Jane Doe')"],
+            ['observe',  'tool returns User(id=42)  ✓'],
+            ['output',   "SupportOutput(advice='Card blocked for Jane Doe.', block_card=True, risk=7)"],
+        ],
+    };
+
+    const viewer = document.getElementById('traceViewer');
+    const buttons = document.querySelectorAll('.demo-controls button');
+    let timers = [];
+
+    function render(key) {
+        timers.forEach(clearTimeout);
+        timers = [];
+        viewer.innerHTML = '';
+        const lines = traces[key];
+        lines.forEach((line, i) => {
+            timers.push(setTimeout(() => {
+                const div = document.createElement('div');
+                div.className = 'trace-line';
+                div.innerHTML = `<span class="label ${line[0]}">${line[0].toUpperCase()}</span>${escapeHtml(line[1])}`;
+                viewer.appendChild(div);
+                viewer.scrollTop = viewer.scrollHeight;
+            }, i * 480));
+        });
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    buttons.forEach(b => b.addEventListener('click', () => {
+        buttons.forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        render(b.dataset.trace);
+    }));
+
+    render('happy');
+})();
+</script>
+
+</body>
+</html>
